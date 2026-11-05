@@ -9,7 +9,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import CompanyProfile, AppListing, Announcement, AuditLog, FinancialEntry, InvestorProfile
-from .serializers import CompanyProfileSerializer, AppListingSerializer, AnnouncementSerializer, FinancialEntrySerializer, InvestorAccountCreateSerializer, InvestorAccountUpdateSerializer, InvestorSerializer
+from .serializers import CompanyProfileSerializer, AppListingSerializer, AnnouncementSerializer, FinancialEntrySerializer, InvestorAccountCreateSerializer, InvestorAccountUpdateSerializer, InvestorSerializer, StaffPasswordChangeSerializer
 from .permissions import IsStaff, PublicReadOnlyOrStaff
 
 class CompanyViewSet(viewsets.ModelViewSet):
@@ -149,3 +149,12 @@ def current_user(request):
         "email": request.user.email,
         "is_staff": request.user.is_staff,
     })
+
+@api_view(["POST"])
+@permission_classes([IsStaff])
+def change_staff_password(request):
+    serializer = StaffPasswordChangeSerializer(data=request.data, context={"request": request})
+    serializer.is_valid(raise_exception=True)
+    request.user.set_password(serializer.validated_data["new_password"])
+    request.user.save(update_fields=["password"])
+    return Response({"detail": "Password changed successfully."})

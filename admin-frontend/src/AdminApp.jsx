@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowDownRight, ArrowUpRight, BadgeIndianRupee, Bell, BriefcaseBusiness,
   Building2, Check, ChevronDown, CircleHelp, FileText, LayoutDashboard, LogOut,
-  Plus, Search, ShieldCheck, Users, X,
+  KeyRound, Plus, Search, ShieldCheck, Users, X,
 } from "lucide-react";
 import api, { accessKey, PUBLIC_SITE_URL, refreshKey } from "./api.js";
 
@@ -13,6 +13,7 @@ const navItems = [
   { id: "announcements", label: "Announcements", icon: Bell },
   { id: "financial", label: "Financial entries", icon: BadgeIndianRupee },
   { id: "investors", label: "Investors", icon: Users },
+  { id: "account", label: "Change password", icon: KeyRound },
 ];
 
 const resources = {
@@ -173,7 +174,7 @@ function AdminApp() {
       <div className="page-content">
         <div className="page-heading"><div><div className="eyebrow">NEO JOBZINDA · ADMIN</div><h1><ActiveIcon size={26}/>{activeItem.label}</h1><p>{active === "overview" ? "A clear view of your company content and operations." : active === "investors" ? "Review investor profiles and account status." : `Manage ${activeItem.label.toLowerCase()} from one place.`}</p></div><div className="live-status"><span/> Workspace active</div></div>
         {toast && <div className="toast"><Check size={16}/>{toast}</div>}
-        {active === "overview" ? <Overview onNavigate={setActive}/> : <RecordsPage key={active} kind={active} onNotify={notify}/>}
+        {active === "overview" ? <Overview onNavigate={setActive}/> : active === "account" ? <ChangePasswordPage onNotify={notify}/> : <RecordsPage key={active} kind={active} onNotify={notify}/>}
       </div>
     </main>
   </div>;
@@ -207,6 +208,36 @@ function Overview({ onNavigate }) {
     <div className="overview-grid"><section className="content-card"><div className="card-heading"><div><span className="section-kicker">QUICK ACCESS</span><h2>Management areas</h2></div><CircleHelp size={17}/></div><div className="quick-grid">{navItems.slice(1).map(item => { const Icon = item.icon; return <button key={item.id} className="quick-link" onClick={() => onNavigate(item.id)}><span><Icon size={18}/></span><strong>{item.label}</strong><ArrowUpRight size={15}/></button>; })}</div></section>
       <section className="content-card activity-card"><div className="card-heading"><div><span className="section-kicker">RECENT ACTIVITY</span><h2>Latest financial entries</h2></div><button className="text-button" onClick={() => onNavigate("financial")}>View all <ArrowUpRight size={14}/></button></div>{data.financial.slice(0, 5).map(row => <div className="activity-row" key={row.id}><div className={row.entry_type === "INCOME" ? "activity-icon income" : "activity-icon expense"}>{row.entry_type === "INCOME" ? <ArrowDownRight size={16}/> : <ArrowUpRight size={16}/>}</div><div className="activity-details"><strong>{row.description}</strong><span>{row.date} · {row.category}</span></div><b className={row.entry_type === "INCOME" ? "amount-positive" : ""}>{row.entry_type === "EXPENSE" ? "−" : "+"}{money(row.amount)}</b></div>)}{!data.financial.length && <div className="empty-inline">No financial entries yet.</div>}</section></div>
   </>;
+}
+
+function ChangePasswordPage({ onNotify }) {
+  const [values, setValues] = useState({ current_password: "", new_password: "", confirm_password: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  function setField(key, value) { setValues(current => ({ ...current, [key]: value })); }
+  async function submit(event) {
+    event.preventDefault(); setError("");
+    if (values.new_password !== values.confirm_password) { setError("The new passwords do not match."); return; }
+    setSaving(true);
+    try {
+      await api.post("/auth/change-password/", { current_password: values.current_password, new_password: values.new_password });
+      setValues({ current_password: "", new_password: "", confirm_password: "" });
+      onNotify("Your password was changed successfully.");
+    } catch (exception) { setError(messageFrom(exception)); }
+    finally { setSaving(false); }
+  }
+  return <section className="content-card password-card">
+    <span className="section-kicker">SECURITY</span>
+    <h2>Change your password</h2>
+    <p>Enter your current password, then choose a new one for your administrator account.</p>
+    <form className="password-form" onSubmit={submit}>
+      <label>Current password<input type="password" autoComplete="current-password" value={values.current_password} onChange={event => setField("current_password", event.target.value)} required/></label>
+      <label>New password<input type="password" autoComplete="new-password" value={values.new_password} onChange={event => setField("new_password", event.target.value)} required/></label>
+      <label>Confirm new password<input type="password" autoComplete="new-password" value={values.confirm_password} onChange={event => setField("confirm_password", event.target.value)} required/></label>
+      {error && <div className="inline-error">{error}</div>}
+      <button className="primary-button" disabled={saving}>{saving ? "Updating…" : "Update password"}</button>
+    </form>
+  </section>;
 }
 
 function RecordsPage({ kind, onNotify }) {
@@ -291,7 +322,7 @@ function RecordsPage({ kind, onNotify }) {
     <div className="records-heading"><div><span className="section-kicker">{kind === "financial" || kind === "investors" ? "RESTRICTED · STAFF ONLY" : "CONTENT MANAGEMENT"}</span><h2>{resource.title}</h2><p>{kind === "investors" ? "Investor accounts linked to the company workspace." : `${records.length} ${resource.title.toLowerCase()} ${records.length === 1 ? "record" : "records"}`}</p></div>{kind === "investors" ? <button className="primary-button" onClick={() => { setAccountError(""); setCreatingInvestor(true); }}><Plus size={17}/> Create investor login</button> : canAdd && <button className="primary-button" onClick={() => startEdit(null)}><Plus size={17}/> Add {resource.singular}</button>}</div>
     <div className="table-toolbar"><div className="search-box"><Search size={16}/><input placeholder={`Search ${resource.title.toLowerCase()}…`} value={query} onChange={event => setQuery(event.target.value)}/></div><button className="quiet-button" onClick={load}>Refresh</button></div>
     {error && <div className="inline-error">{error}</div>}
-    {loading ? <div className="loading-panel"><div className="spinner"/>Loading records…</div> : filtered.length ? <div className="table-wrap"><table className="records-table"><thead><tr>{resource.columns.map(([key, label]) => <th key={key}>{label}</th>)}{(!resource.readonly || kind === "investors") && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{filtered.map(record => <tr key={record.id ?? "company"}>{resource.columns.map(([key]) => <td key={key} className={key === "amount" ? "money-cell" : ""}>{labelValue(record, key)}</td>)}{(!resource.readonly || kind === "investors") && <td><div className="row-actions"><button onClick={() => startEdit(record)}>{kind === "investors" ? "Manage" : "Edit"}</button>{!resource.readonly && kind !== "company" && kind !== "investors" && <button className="delete-action" onClick={() => remove(record)}>Delete</button>}</div></td>}</tr>)}</tbody></table></div> : <div className="empty-state"><FileText size={27}/><h3>{query ? "No matching records" : "Nothing here yet"}</h3><p>{query ? "Try a different search." : "Add your first record to get started."}</p>{!query && canAdd && <button className="primary-button" onClick={() => startEdit(null)}><Plus size={16}/> Add {resource.singular}</button>}</div>}
+    {loading ? <div className="loading-panel"><div className="spinner"/>Loading records…</div> : filtered.length ? <div className="table-wrap"><table className="records-table"><thead><tr>{resource.columns.map(([key, label]) => <th key={key}>{label}</th>)}{(!resource.readonly || kind === "investors") && <th className="actions-heading">Actions</th>}</tr></thead><tbody>{filtered.map(record => <tr key={record.id ?? "company"}>{resource.columns.map(([key]) => <td key={key} className={key === "amount" ? "money-cell" : ""}>{labelValue(record, key)}</td>)}{(!resource.readonly || kind === "investors") && <td><div className="row-actions"><button onClick={() => startEdit(record)}>Edit</button>{!resource.readonly && kind !== "company" && kind !== "investors" && <button className="delete-action" onClick={() => remove(record)}>Delete</button>}</div></td>}</tr>)}</tbody></table></div> : <div className="empty-state"><FileText size={27}/><h3>{query ? "No matching records" : kind === "investors" ? "No investor accounts yet" : "Nothing here yet"}</h3><p>{query ? "Try a different search." : kind === "investors" ? "Create the first investor login above. After it’s created, use Edit on its row to update details, change its password, or deactivate access." : "Add your first record to get started."}</p>{!query && canAdd && <button className="primary-button" onClick={() => startEdit(null)}><Plus size={16}/> Add {resource.singular}</button>}</div>}
     {editing && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setEditing(null); }}><form className="edit-modal" onSubmit={save}><div className="modal-heading"><div><span className="section-kicker">{kind === "investors" ? "INVESTOR ACCOUNT" : editing.record ? "EDIT RECORD" : "NEW RECORD"}</span><h2>{kind === "investors" ? "Manage investor" : `${editing.record ? "Update" : "Add"} ${resource.singular}`}</h2></div><button type="button" className="icon-button" onClick={() => setEditing(null)} aria-label="Close"><X size={19}/></button></div>{kind === "investors" && <p className="modal-intro">Update the investor’s profile or access. Leave the password blank to keep the current one. Deactivating the account prevents investor access.</p>}<div className="modal-fields">{resource.fields.map(field => <label key={field.key} className={field.type === "textarea" || field.type === "password" ? "field-wide" : ""}>{field.type === "checkbox" ? <span className="check-field"><input type="checkbox" checked={Boolean(editing.value[field.key])} onChange={event => setField(field.key, event.target.checked)}/>{field.label}</span> : <>{field.label}{field.hint && <small>{field.hint}</small>}{field.type === "select" ? <select value={editing.value[field.key] || ""} required={field.required} onChange={event => setField(field.key, event.target.value)}><option value="">Select a type</option>{field.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : field.type === "investor" ? <select value={editing.value[field.key] || ""} onChange={event => setField(field.key, event.target.value)}><option value="">No linked investor</option>{investorOptions.map(person => <option key={person.id} value={person.id}>{person.investor_code} · {person.name || person.username}</option>)}</select> : field.type === "textarea" ? <textarea rows="4" value={editing.value[field.key] || ""} required={field.required} onChange={event => setField(field.key, event.target.value)}/> : <input type={field.type || "text"} value={editing.value[field.key] ?? ""} required={field.required} step={field.step} autoComplete={field.type === "password" ? "new-password" : undefined} onChange={event => setField(field.key, event.target.value)}/>}</>}</label>)}</div><div className="modal-actions"><button type="button" className="quiet-button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></div></form></div>}
     {creatingInvestor && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setCreatingInvestor(false); }}><form className="edit-modal" onSubmit={createInvestor}><div className="modal-heading"><div><span className="section-kicker">NEW INVESTOR ACCOUNT</span><h2>Create investor login</h2></div><button type="button" className="icon-button" onClick={() => setCreatingInvestor(false)} aria-label="Close" disabled={saving}><X size={19}/></button></div><p className="modal-intro">This creates a standard investor account with read-only access to published financial information.</p><div className="modal-fields"><label>Username<input autoComplete="off" value={investorDraft.username} onChange={event => changeInvestorField("username", event.target.value)} required/></label><label>Investor code<input value={investorDraft.investor_code} onChange={event => changeInvestorField("investor_code", event.target.value)} required/></label><label>Email<input type="email" autoComplete="off" value={investorDraft.email} onChange={event => changeInvestorField("email", event.target.value)}/></label><label>Phone<input value={investorDraft.phone} onChange={event => changeInvestorField("phone", event.target.value)}/></label><label>First name<input autoComplete="off" value={investorDraft.first_name} onChange={event => changeInvestorField("first_name", event.target.value)}/></label><label>Last name<input autoComplete="off" value={investorDraft.last_name} onChange={event => changeInvestorField("last_name", event.target.value)}/></label><label>Password<input type="password" autoComplete="new-password" value={investorDraft.password} onChange={event => changeInvestorField("password", event.target.value)} required/></label><label>Confirm password<input type="password" autoComplete="new-password" value={investorDraft.confirm_password} onChange={event => changeInvestorField("confirm_password", event.target.value)} required/></label><p className="password-hint field-wide">Django’s password rules apply. The password is write-only and won’t be shown again after account creation.</p></div>{accountError && <div className="inline-error">{accountError}</div>}<div className="modal-actions"><button type="button" className="quiet-button" onClick={() => setCreatingInvestor(false)} disabled={saving}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Creating account…" : "Create account"}</button></div></form></div>}
   </section>;
