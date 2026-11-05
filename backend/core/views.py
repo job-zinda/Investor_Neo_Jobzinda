@@ -9,7 +9,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import CompanyProfile, AppListing, Announcement, AuditLog, FinancialEntry, InvestorProfile
-from .serializers import CompanyProfileSerializer, AppListingSerializer, AnnouncementSerializer, FinancialEntrySerializer, InvestorAccountCreateSerializer, InvestorSerializer
+from .serializers import CompanyProfileSerializer, AppListingSerializer, AnnouncementSerializer, FinancialEntrySerializer, InvestorAccountCreateSerializer, InvestorAccountUpdateSerializer, InvestorSerializer
 from .permissions import IsStaff, PublicReadOnlyOrStaff
 
 class CompanyViewSet(viewsets.ModelViewSet):
@@ -38,10 +38,27 @@ class AdminEntryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaff]
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-class InvestorViewSet(viewsets.ReadOnlyModelViewSet):
+class InvestorViewSet(viewsets.ModelViewSet):
     queryset = InvestorProfile.objects.select_related("user").all()
     serializer_class = InvestorSerializer
     permission_classes = [IsStaff]
+    http_method_names = ["get", "put", "patch", "head", "options"]
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return InvestorAccountUpdateSerializer
+        return InvestorSerializer
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        profile = serializer.save()
+        AuditLog.objects.create(
+            actor=self.request.user,
+            action="investor.account_updated",
+            object_type="InvestorProfile",
+            object_id=str(profile.pk),
+            details={"investor_code": profile.investor_code, "username": profile.user.get_username()},
+        )
 
 @api_view(["POST"])
 @permission_classes([IsStaff])
